@@ -1,8 +1,12 @@
-import std/[asyncdispatch, httpclient, options, strutils, strformat, json]
+import std/[asyncdispatch, httpclient, options, strutils, strformat, json, os]
 import dimscord
 import character
 
-let discord = newDiscordClient("MTA5NjQ1NTg0Mjc1NDIyMDE0Mw.GoHf0_.LuXd_H6Jgd7TDB91uUZ0YkCRM3XeDLG3o5_xSI")
+let botToken = getEnv("BOT_TOKEN")
+if botToken.len == 0:
+  quit "BOT_TOKEN env var must be provided!"
+
+let discord = newDiscordClient(botToken)
 
 # Handle event for on_ready.
 proc onReady(s: Shard, r: Ready) {.event(discord).} =
