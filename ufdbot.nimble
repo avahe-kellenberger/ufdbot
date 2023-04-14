@@ -12,3 +12,10 @@ bin           = @["ufdbot"]
 
 requires "nim >= 1.6.12"
 requires "dimscord >= 1.4.0"
+
+task runr, "Runs the program":
+  exec "nim r -d:ssl -d:release --opt:speed src/ufdbot.nim"
+
+task release, "Creates a release build":
+  exec "nim c -o:bin/ufd -d:ssl -d:release --opt:speed src/ufdbot.nim"
+
