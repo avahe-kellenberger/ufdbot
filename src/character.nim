@@ -24,7 +24,26 @@ type
     hops_actionable*:Option[string]
     endlag*: Option[string]
 
+  Stats* = object
+    air_speed*: Option[string]
+    fall_speed_fast_fall_speed*: Option[string]
+    gravity*: Option[string]
+    initial_dash*: Option[string]
+    jump_squat*: Option[string]
+    oos_options*: Option[seq[string]]
+    run_speed*: Option[string]
+    sh_fh_shff_fhff_frames*: Option[string]
+    shield_drop*: Option[string]
+    shield_grab*: Option[string]
+    total_air_acceleration*: Option[string]
+    walk_speed*: Option[string]
+    weight*: Option[string]
+
   MoveLookupResponse* = object
     character*: string
     move*: Move
+
+  StatsLookupResponse* = object
+    character*: string
+    stats*: Stats
 

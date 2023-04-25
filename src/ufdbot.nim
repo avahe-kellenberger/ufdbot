@@ -2,13 +2,17 @@ import std/[asyncdispatch, httpclient, options, strutils, strformat, json, os, r
 import dimscord
 import character
 
+const apiEndpoint = "http://flatzone.pro:5000"
+
 let botToken = getEnv("BOT_TOKEN")
 if botToken.len == 0:
   quit "BOT_TOKEN env var must be provided!"
 
 let discord = newDiscordClient(botToken)
 
-let movesCommandRegex = re"!moves? .+"
+let
+  movesCommandRegex = re"!moves? .+"
+  statsCommandPrefix = "!stats "
 
 # Handle event for on_ready.
 proc onReady(s: Shard, r: Ready) {.event(discord).} =
@@ -16,7 +20,12 @@ proc onReady(s: Shard, r: Ready) {.event(discord).} =
 
 proc searchCharacterMove(characterName, moveName: string): Future[JsonNode] {.async.} =
   var client = newAsyncHttpClient()
-  let content = await client.getContent(fmt"http://flatzone.pro:5000/characters/{characterName}/{moveName}")
+  let content = await client.getContent(fmt"{apiEndpoint}/characters/{characterName}/{moveName}")
+  return parseJson(content)
+
+proc searchCharacterStats(characterName: string): Future[JsonNode] {.async.} =
+  var client = newAsyncHttpClient()
+  let content = await client.getContent(fmt"{apiEndpoint}/stats/{characterName}")
   return parseJson(content)
 
 template addProperty(property: Option[string], name: string) =
@@ -30,7 +39,7 @@ template addProperty(property: Option[string], name: string) =
     if counter mod 3 != 0:
       result &= "    "
 
-proc formatReply(response: MoveLookupResponse): string =
+proc formatMoveReply(response: MoveLookupResponse): string =
   let move = response.move
   block:
     var counter = 0
@@ -48,6 +57,30 @@ proc formatReply(response: MoveLookupResponse): string =
     addProperty(move.endlag, "End Lag")
     addProperty(move.notes, "Notes")
 
+proc formatStatsReply(response: StatsLookupResponse): string =
+  let stats = response.stats
+  block:
+    var counter = 0
+    addProperty(stats.weight, "Weight")
+    addProperty(stats.gravity, "Gravity")
+    addProperty(stats.walk_speed, "Walk Speed")
+    addProperty(stats.run_speed, "Run Speed")
+    addProperty(stats.initial_dash, "Initial Dash")
+    addProperty(stats.air_speed, "Air Speed")
+    addProperty(stats.total_air_acceleration, "Total Air Acceleration")
+    addProperty(stats.sh_fh_shff_fhff_frames, "SH / FH / SHFF / FHFF Frames")
+    addProperty(stats.fall_speed_fast_fall_speed, "Fall Speed / Fast Fall Speed")
+    addProperty(stats.shield_grab, "Shield Grab (Grab, post-Shieldstun)")
+    addProperty(stats.shield_drop, "Shield Drop")
+    addProperty(stats.jump_squat, "Jump Squat (pre-Jump frames)")
+
+    if stats.oos_options.isSome():
+      let options = stats.oos_options.get()
+      if options.len > 0:
+        result &= "\n**Out of shield**:"
+        for option in options:
+          result &= "\n" & option
+
 proc getGifUrls(response: MoveLookupResponse): seq[string] =
   let move = response.move
   for hitbox in move.hitboxes:
@@ -64,7 +97,12 @@ proc sendFormattedReply(message: Message, response: MoveLookupResponse): Future[
   for gifUrl in getGifUrls(response):
     discard await discord.api.sendMessage(message.channel_id, gifUrl)
 
-  discard await discord.api.sendMessage(message.channel_id, ">>> " & formatReply(response))
+  discard await discord.api.sendMessage(message.channel_id, ">>> " & formatMoveReply(response))
+
+proc sendFormattedReply(message: Message, response: StatsLookupResponse): Future[void] {.async.} =
+  let title = fmt"**{response.character}: Stats**"
+  discard await discord.api.sendMessage(message.channel_id, title)
+  discard await discord.api.sendMessage(message.channel_id, ">>> " & formatStatsReply(response))
 
 # Handle event for message_create.
 proc messageCreate(s: Shard, message: Message) {.event(discord).} =
@@ -77,7 +115,7 @@ proc messageCreate(s: Shard, message: Message) {.event(discord).} =
       return
 
     let characterName = split[1]
-    let moveName = split[2..^1].join()
+    let moveName = split[2..^1].join().strip()
 
     let response = await searchCharacterMove(characterName, moveName)
     if response.kind == JObject:
@@ -87,6 +125,19 @@ proc messageCreate(s: Shard, message: Message) {.event(discord).} =
       discard await discord.api.sendMessage(message.channel_id, response.str)
     else:
       discard await discord.api.sendMessage(message.channel_id, "Error: " & $response)
+
+  elif message.content.startsWith(statsCommandPrefix):
+    let split = message.content.split(statsCommandPrefix, 1)
+    if split.len >= 2:
+      let characterName = split[1..^1].join().strip()
+      let response = await searchCharacterStats(characterName)
+      if response.kind == JObject:
+        let statsLookupResponse = response.to(StatsLookupResponse)
+        await sendFormattedReply(message, statsLookupResponse)
+      elif response.kind == JString:
+        discard await discord.api.sendMessage(message.channel_id, response.str)
+      else:
+        discard await discord.api.sendMessage(message.channel_id, "Error: " & $response)
 
 # Connect to Discord and run the bot.
 waitFor discord.startSession()

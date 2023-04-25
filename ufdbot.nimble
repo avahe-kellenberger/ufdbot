@@ -19,3 +19,6 @@ task runr, "Runs the program":
 task release, "Creates a release build":
   exec "nim c -o:bin/ufd -d:ssl -d:release --opt:speed src/ufdbot.nim"
 
+task debug, "Creates a debug build":
+  exec "nim c -o:bin/ufd -d:ssl -d:dimscordDebug src/ufdbot.nim"
+
